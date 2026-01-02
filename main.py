@@ -245,10 +245,66 @@ async def get_category_entries(category: str, limit: int = 50):
     # Convert to list of dicts, excluding embedding for brevity
     entries = df.head(limit).drop(columns=["Prompt_Embedding"], errors="ignore").to_dict("records")
     
+    # Rename columns to match frontend expectations
+    for entry in entries:
+        if "ID" in entry:
+            entry["entry_id"] = entry.pop("ID")
+        if "Category" in entry:
+            entry["category"] = entry.pop("Category")
+        if "Prompt" in entry:
+            entry["prompt"] = entry.pop("Prompt")
+        if "Response" in entry:
+            entry["response"] = entry.pop("Response")
+        if "Timestamp" in entry:
+            entry["timestamp"] = entry.pop("Timestamp")
+    
     return {
         "entries": entries,
         "count": len(df),
         "showing": min(limit, len(df))
+    }
+
+
+@app.get("/api/data/entries/all")
+async def get_all_entries(limit: int = 100):
+    """Get all entries from all categories"""
+    all_entries = []
+    categories = ["architecture", "ui", "database", "api", "prompts"]
+    
+    for category in categories:
+        try:
+            df = excel_service.get_all_data(category)
+            if not df.empty:
+                entries = df.drop(columns=["Prompt_Embedding"], errors="ignore").to_dict("records")
+                
+                # Rename columns to match frontend expectations
+                for entry in entries:
+                    if "ID" in entry:
+                        entry["entry_id"] = entry.pop("ID")
+                    if "Category" in entry:
+                        entry["category"] = entry.pop("Category")
+                    if "Prompt" in entry:
+                        entry["prompt"] = entry.pop("Prompt")
+                    if "Response" in entry:
+                        entry["response"] = entry.pop("Response")
+                    if "Timestamp" in entry:
+                        entry["timestamp"] = entry.pop("Timestamp")
+                    
+                    # Ensure category is set
+                    entry["category"] = entry.get("category", category)
+                
+                all_entries.extend(entries)
+        except Exception as e:
+            logger.warning(f"Could not load {category} sheet: {e}")
+            continue
+    
+    # Sort by timestamp (most recent first)
+    all_entries.sort(key=lambda x: x.get("timestamp", ""), reverse=True)
+    
+    return {
+        "entries": all_entries[:limit],
+        "total_count": len(all_entries),
+        "showing": min(limit, len(all_entries))
     }
 
 
